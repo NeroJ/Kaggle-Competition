@@ -27,8 +27,10 @@ Parameters = {'RF':{'categoricalFeaturesInfo':{}, 'numTrees':10,'maxDepth':30},
               'KMeans':{'k':5, 'maxIterations':100, 'initializationMode':'random', 'seed':50, 'initializationSteps':2, 'epsilon':1e-4}}
 
 class Fraud_DetectionTraining:
-    def __init__(self, Clustering=True, file_name='train_sample.csv', classificationModel='LRlbfgs', ModelSave=False, classificationPara=Parameters):
+    def __init__(self, Clustering=True, file_name='train_sample.csv', classificationModel='LRlbfgs', ModelSave=True, classificationPara=Parameters):
+        self.modelnameDir = [item for item in os.listdir('Model')]
         self.Parameters = Parameters
+        self.file = open('Result_txt/'+classificationModel+'_Result', 'w')
         self.sc = SparkContext()
         self.spark = SparkSession \
             .builder \
@@ -63,14 +65,20 @@ class Fraud_DetectionTraining:
 
     def KMeans_Processing(self, columns):
         data_point = np.array(self.df_PD[columns])
-        model = KMeans.train(self.sc.parallelize(data_point), k=self.Parameters['KMeans']['k'],
-                             maxIterations=self.Parameters['KMeans']['maxIterations'],
-                             initializationMode=self.Parameters['KMeans']['initializationMode'],
-                             seed=self.Parameters['KMeans']['seed'],
-                             initializationSteps=self.Parameters['KMeans']['initializationSteps'],
-                             epsilon=self.Parameters['KMeans']['epsilon'])
-        result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
-        self.df_PD.insert(len(list(self.df_PD.columns))-1, 'KMeans_feature', result)
+        if 'KMeans' not in self.modelnameDir:
+            model = KMeans.train(self.sc.parallelize(data_point), k=self.Parameters['KMeans']['k'],
+                                 maxIterations=self.Parameters['KMeans']['maxIterations'],
+                                 initializationMode=self.Parameters['KMeans']['initializationMode'],
+                                 seed=self.Parameters['KMeans']['seed'],
+                                 initializationSteps=self.Parameters['KMeans']['initializationSteps'],
+                                 epsilon=self.Parameters['KMeans']['epsilon'])
+            result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
+            self.df_PD.insert(len(list(self.df_PD.columns))-1, 'KMeans_feature', result)
+            model.save(self.sc, 'Model/'+'KMeans')
+        else:
+            model = KMeansModel.load(self.sc, 'Model/'+'KMeans')
+            result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
+            self.df_PD.insert(len(list(self.df_PD.columns))-1, 'KMeans_feature', result)
 
     def Validation_Accuracy(self, XInput_Train, YInput_Train, XInput_Vali, YInput_Vali, modelType):
         dataInput = [LabeledPoint(item1, item2) for item1, item2 in zip(YInput_Train, XInput_Train)]
@@ -129,54 +137,62 @@ class Fraud_DetectionTraining:
             counter += 1
             Acc_accumulator += acc
             print 'The '+str(counter)+'st validation accuracy of '+model+' : '+str(acc)
+            self.file.write('The '+str(counter)+'st validation accuracy of '+model+' : '+str(acc)+'\n')
             break
         print 'The average validation accuracy of '+model+' : ' +str(Acc_accumulator/float(counter))
+        self.file.write('The average validation accuracy of '+model+' : ' +str(Acc_accumulator/float(counter))+'\n')
 
     def Model_Saving(self, modelType):
         dataInput = [LabeledPoint(item1, item2) for item1, item2 in zip(self.Lables, self.Features)]
         if modelType == 'RF':
-            model = RandomForest.trainClassifier(data=self.sc.parallelize(dataInput),
-                                                 numClasses=2,categoricalFeaturesInfo=self.Parameters[modelType]['categoricalFeaturesInfo'],
-                                                 numTrees=self.Parameters[modelType]['numTrees'],
-                                                 maxDepth=self.Parameters[modelType]['maxDepth'],
-                                                 seed=42)
-            model.save(self.sc, modelType)
+            if modelType not in self.modelnameDir:
+                model = RandomForest.trainClassifier(data=self.sc.parallelize(dataInput),
+                                                     numClasses=2,categoricalFeaturesInfo=self.Parameters[modelType]['categoricalFeaturesInfo'],
+                                                     numTrees=self.Parameters[modelType]['numTrees'],
+                                                     maxDepth=self.Parameters[modelType]['maxDepth'],
+                                                     seed=42)
+                model.save(self.sc, 'Model/'+modelType)
         elif modelType == 'GBDT':
-            model = GradientBoostedTrees.trainClassifier(data=self.sc.parallelize(dataInput),
-                                                        learningRate=self.Parameters[modelType]['learningRate'],
-                                                        categoricalFeaturesInfo=self.Parameters[modelType]['categoricalFeaturesInfo'],
-                                                        numIterations=self.Parameters[modelType]['numIterations'],
-                                                        loss=self.Parameters[modelType]['loss'])
-            model.save(self.sc, modelType)
+            if modelType not in self.modelnameDir:
+                model = GradientBoostedTrees.trainClassifier(data=self.sc.parallelize(dataInput),
+                                                            learningRate=self.Parameters[modelType]['learningRate'],
+                                                            categoricalFeaturesInfo=self.Parameters[modelType]['categoricalFeaturesInfo'],
+                                                            numIterations=self.Parameters[modelType]['numIterations'],
+                                                            loss=self.Parameters[modelType]['loss'])
+                model.save(self.sc, 'Model/'+modelType)
         elif modelType == 'LRsgd':
-            model = LogisticRegressionWithSGD.train(self.sc.parallelize(dataInput),
-                                                    iterations=self.Parameters[modelType]['iterations'],
-                                                    step=self.Parameters[modelType]['step'],
-                                                    miniBatchFraction=self.Parameters[modelType]['miniBatchFraction'],
-                                                    regParam=self.Parameters[modelType]['regParam'],
-                                                    regType=self.Parameters[modelType]['regType'])
-            model.save(self.sc, modelType)
+            if modelType not in self.modelnameDir:
+                model = LogisticRegressionWithSGD.train(self.sc.parallelize(dataInput),
+                                                        iterations=self.Parameters[modelType]['iterations'],
+                                                        step=self.Parameters[modelType]['step'],
+                                                        miniBatchFraction=self.Parameters[modelType]['miniBatchFraction'],
+                                                        regParam=self.Parameters[modelType]['regParam'],
+                                                        regType=self.Parameters[modelType]['regType'])
+                model.save(self.sc, 'Model/'+modelType)
         elif modelType == 'LRlbfgs':
-            model = LogisticRegressionWithLBFGS.train(self.sc.parallelize(dataInput),
-                                                      iterations=self.Parameters[modelType]['iterations'],
-                                                      regParam=self.Parameters[modelType]['regParam'],
-                                                      regType=self.Parameters[modelType]['regType'])
-            model.save(self.sc, modelType)
+            if modelType not in self.modelnameDir:
+                model = LogisticRegressionWithLBFGS.train(self.sc.parallelize(dataInput),
+                                                          iterations=self.Parameters[modelType]['iterations'],
+                                                          regParam=self.Parameters[modelType]['regParam'],
+                                                          regType=self.Parameters[modelType]['regType'])
+                model.save(self.sc, 'Model/'+modelType)
         elif modelType == 'SVM':
-            model = SVMWithSGD.train(self.sc.parallelize(dataInput),
-                                     iterations=self.Parameters[modelType]['iterations'],
-                                     step=self.Parameters[modelType]['step'],
-                                     regParam=self.Parameters[modelType]['regParam'],
-                                     miniBatchFraction=self.Parameters[modelType]['miniBatchFraction'],
-                                     regType=self.Parameters[modelType]['regType'])
-            model.save(self.sc, modelType)
+            if modelType not in self.modelnameDir:
+                model = SVMWithSGD.train(self.sc.parallelize(dataInput),
+                                         iterations=self.Parameters[modelType]['iterations'],
+                                         step=self.Parameters[modelType]['step'],
+                                         regParam=self.Parameters[modelType]['regParam'],
+                                         miniBatchFraction=self.Parameters[modelType]['miniBatchFraction'],
+                                         regType=self.Parameters[modelType]['regType'])
+                model.save(self.sc, 'Model/'+modelType)
         else:
             pass
 
 
     def __del__(self):
+        self.file.close()
         self.sc.stop()
         self.spark.stop()
 
 
-Fraud_DetectionTraining(Clustering=True, file_name='train_sample.csv', classificationModel='RF', ModelSave=False)
+Fraud_DetectionTraining(Clustering=True, file_name='Data/train_sample.csv', classificationModel='LRlbfgs', ModelSave=True)
