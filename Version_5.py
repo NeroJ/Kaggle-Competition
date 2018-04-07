@@ -6,7 +6,6 @@ import datetime
 import numpy as np
 import pandas as pd
 from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.conf import SparkConf
 from pyspark.sql import *
 from operator import add
@@ -80,6 +79,8 @@ class Fraud_DetectionTraining:
             model = KMeansModel.load(self.sc, 'Model/'+'KMeans')
             result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
             self.df_PD.insert(len(list(self.df_PD.columns))-1, 'KMeans_feature', result)
+        paras = json.dumps(Parameters['KMeans'])
+        self.file.write('KMeans Parameters: '+str(paras)+'\n')
 
     def Validation_Accuracy(self, XInput_Train, YInput_Train, XInput_Vali, YInput_Vali, modelType):
         dataInput = [LabeledPoint(item1, item2) for item1, item2 in zip(YInput_Train, XInput_Train)]
@@ -90,7 +91,7 @@ class Fraud_DetectionTraining:
                                                  maxDepth=self.Parameters[modelType]['maxDepth'],
                                                  seed=42)
             paras = json.dumps(Parameters[modelType])
-            self.file.write('Parameters: '+str(paras)+'\n')
+            self.file.write(modelType+' Parameters: '+str(paras)+'\n')
         elif modelType == 'GBDT':
             model = GradientBoostedTrees.trainClassifier(data=self.sc.parallelize(dataInput),
                                                         learningRate=self.Parameters[modelType]['learningRate'],
@@ -98,7 +99,7 @@ class Fraud_DetectionTraining:
                                                         numIterations=self.Parameters[modelType]['numIterations'],
                                                         loss=self.Parameters[modelType]['loss'])
             paras = json.dumps(Parameters[modelType])
-            self.file.write('Parameters: '+str(paras)+'\n')
+            self.file.write(modelType+' Parameters: '+str(paras)+'\n')
         elif modelType == 'LRsgd':
             model = LogisticRegressionWithSGD.train(self.sc.parallelize(dataInput),
                                                     iterations=self.Parameters[modelType]['iterations'],
@@ -107,14 +108,14 @@ class Fraud_DetectionTraining:
                                                     regParam=self.Parameters[modelType]['regParam'],
                                                     regType=self.Parameters[modelType]['regType'])
             paras = json.dumps(Parameters[modelType])
-            self.file.write('Parameters: '+str(paras)+'\n')
+            self.file.write(modelType+' Parameters: '+str(paras)+'\n')
         elif modelType == 'LRlbfgs':
             model = LogisticRegressionWithLBFGS.train(self.sc.parallelize(dataInput),
                                                       iterations=self.Parameters[modelType]['iterations'],
                                                       regParam=self.Parameters[modelType]['regParam'],
                                                       regType=self.Parameters[modelType]['regType'])
             paras = json.dumps(Parameters[modelType])
-            self.file.write('Parameters: '+str(paras)+'\n')
+            self.file.write(modelType+' Parameters: '+str(paras)+'\n')
         elif modelType == 'SVM':
             model = SVMWithSGD.train(self.sc.parallelize(dataInput),
                                      iterations=self.Parameters[modelType]['iterations'],
@@ -123,7 +124,7 @@ class Fraud_DetectionTraining:
                                      miniBatchFraction=self.Parameters[modelType]['miniBatchFraction'],
                                      regType=self.Parameters[modelType]['regType'])
             paras = json.dumps(Parameters[modelType])
-            self.file.write('Parameters: '+str(paras)+'\n')
+            self.file.write(modelType+' Parameters: '+str(paras)+'\n')
         else:
             pass
         Y_pre = model.predict(self.sc.parallelize(XInput_Vali)).collect()
@@ -158,7 +159,8 @@ class Fraud_DetectionTraining:
         if modelType == 'RF':
             if modelType not in self.modelnameDir:
                 model = RandomForest.trainClassifier(data=self.sc.parallelize(dataInput),
-                                                     numClasses=2,categoricalFeaturesInfo=self.Parameters[modelType]['categoricalFeaturesInfo'],
+                                                     numClasses=2,
+                                                     categoricalFeaturesInfo=self.Parameters[modelType]['categoricalFeaturesInfo'],
                                                      numTrees=self.Parameters[modelType]['numTrees'],
                                                      maxDepth=self.Parameters[modelType]['maxDepth'],
                                                      seed=42)
