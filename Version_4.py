@@ -1,5 +1,8 @@
 import sys
 import os
+import time
+import json
+import datetime
 import numpy as np
 import pandas as pd
 from pyspark import SparkContext
@@ -9,8 +12,6 @@ from pyspark.sql import *
 from operator import add
 from sklearn.cross_validation import KFold
 from pyspark.mllib.clustering import KMeans, KMeansModel
-import time
-import datetime
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.tree import RandomForest, RandomForestModel
 from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
@@ -88,12 +89,16 @@ class Fraud_DetectionTraining:
                                                  numTrees=self.Parameters[modelType]['numTrees'],
                                                  maxDepth=self.Parameters[modelType]['maxDepth'],
                                                  seed=42)
+            paras = json.dumps(Parameters[modelType])
+            self.file.write('Parameters: '+str(paras)+'\n')
         elif modelType == 'GBDT':
             model = GradientBoostedTrees.trainClassifier(data=self.sc.parallelize(dataInput),
                                                         learningRate=self.Parameters[modelType]['learningRate'],
                                                         categoricalFeaturesInfo=self.Parameters[modelType]['categoricalFeaturesInfo'],
                                                         numIterations=self.Parameters[modelType]['numIterations'],
                                                         loss=self.Parameters[modelType]['loss'])
+            paras = json.dumps(Parameters[modelType])
+            self.file.write('Parameters: '+str(paras)+'\n')
         elif modelType == 'LRsgd':
             model = LogisticRegressionWithSGD.train(self.sc.parallelize(dataInput),
                                                     iterations=self.Parameters[modelType]['iterations'],
@@ -101,11 +106,15 @@ class Fraud_DetectionTraining:
                                                     miniBatchFraction=self.Parameters[modelType]['miniBatchFraction'],
                                                     regParam=self.Parameters[modelType]['regParam'],
                                                     regType=self.Parameters[modelType]['regType'])
+            paras = json.dumps(Parameters[modelType])
+            self.file.write('Parameters: '+str(paras)+'\n')
         elif modelType == 'LRlbfgs':
             model = LogisticRegressionWithLBFGS.train(self.sc.parallelize(dataInput),
                                                       iterations=self.Parameters[modelType]['iterations'],
                                                       regParam=self.Parameters[modelType]['regParam'],
                                                       regType=self.Parameters[modelType]['regType'])
+            paras = json.dumps(Parameters[modelType])
+            self.file.write('Parameters: '+str(paras)+'\n')
         elif modelType == 'SVM':
             model = SVMWithSGD.train(self.sc.parallelize(dataInput),
                                      iterations=self.Parameters[modelType]['iterations'],
@@ -113,6 +122,8 @@ class Fraud_DetectionTraining:
                                      regParam=self.Parameters[modelType]['regParam'],
                                      miniBatchFraction=self.Parameters[modelType]['miniBatchFraction'],
                                      regType=self.Parameters[modelType]['regType'])
+            paras = json.dumps(Parameters[modelType])
+            self.file.write('Parameters: '+str(paras)+'\n')
         else:
             pass
         Y_pre = model.predict(self.sc.parallelize(XInput_Vali)).collect()
@@ -187,7 +198,6 @@ class Fraud_DetectionTraining:
                 model.save(self.sc, 'Model/'+modelType)
         else:
             pass
-
 
     def __del__(self):
         self.file.close()
