@@ -16,12 +16,12 @@ from pyspark.mllib.tree import RandomForest, RandomForestModel
 from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
 from pyspark.mllib.classification import LogisticRegressionWithSGD, LogisticRegressionWithLBFGS, SVMWithSGD
 from pyspark.mllib.classification import SVMModel, LogisticRegressionModel
-os.environ["PYSPARK_PYTHON"]="/System/Library/Frameworks/Python.framework/Versions/2.7/bin/python2.7"
-
+#os.environ["PYSPARK_PYTHON"]="/System/Library/Frameworks/Python.framework/Versions/2.7/bin/python2.7"
+#os.environ["PYSPARK_PYTHON"] = "/Library/Frameworks/Python.framework/Versions/3.5/lib/python3.5"
 #-----classification model parameters to be determined-------------#
-Parameters = {'RF':{'categoricalFeaturesInfo':{}, 'numTrees':10,'maxDepth':30},
+Parameters = {'RF':{'categoricalFeaturesInfo':{}, 'numTrees':20,'maxDepth':30},
               'GBDT': {'categoricalFeaturesInfo':{}, 'learningRate':0.1, 'numIterations':100, 'loss':'leastSquaresError'},
-              'LRsgd':{'iterations':100, 'step':0.1, 'miniBatchFraction':1.0, 'regParam':0.01, 'regType':'l2'},
+              'LRsgd':{'iterations':100, 'step':0.1, 'miniBatchFraction':1.0, 'regParam':0.1, 'regType':'l2'},
               'LRlbfgs':{'iterations':100, 'regParam':0.0, 'regType':'l2'},
               'SVM':{'iterations':100, 'step':0.1, 'regParam':0.01, 'miniBatchFraction':1.0, 'regType':'l2'},
               'KMeans':{'k':5, 'maxIterations':100, 'initializationMode':'random', 'seed':50, 'initializationSteps':2, 'epsilon':1e-4}}
@@ -37,7 +37,7 @@ class Fraud_DetectionTraining:
             .appName("Fraud_Detection") \
             .config("spark.some.config.option", "some-value") \
             .getOrCreate()
-        self.df = self.spark.read.csv(file_name, header=True, inferSchema=True).drop('attributed_time')
+        self.df = self.spark.read.csv(file_name[0], header=True, inferSchema=True).drop('attributed_time')
         self.header = self.df.columns
         self.rdd = self.sc.parallelize(self.df.collect())
         #-----must be a local variable------#
@@ -62,6 +62,14 @@ class Fraud_DetectionTraining:
         #---model saving---#
         if ModelSave == True:
             self.Model_Saving(classificationModel)
+
+    def split_process(self, name):
+        dfList = [self.spark.read.csv(name[i], header=True, inferSchema=True).drop('attributed_time') for i in range(len(NameList))]
+        temp = []
+        for item in dfList:
+            temp = temp + item.collect()
+        df_ = self.spark.createDataFrame(temp)
+        return df_
 
     def KMeans_Processing(self, columns):
         data_point = np.array(self.df_PD[columns])
@@ -148,10 +156,10 @@ class Fraud_DetectionTraining:
             acc = self.Validation_Accuracy(self.Features[tr], self.Lables[tr], self.Features[tst], self.Lables[tst], model)
             counter += 1
             Acc_accumulator += acc
-            print 'The '+str(counter)+'st validation accuracy of '+model+' : '+str(acc)
+            print ('The '+str(counter)+'st validation accuracy of '+model+' : '+str(acc))
             self.file.write('The '+str(counter)+'st validation accuracy of '+model+' : '+str(acc)+'\n')
             break
-        print 'The average validation accuracy of '+model+' : ' +str(Acc_accumulator/float(counter))
+        print ('The average validation accuracy of '+model+' : ' +str(Acc_accumulator/float(counter)))
         self.file.write('The average validation accuracy of '+model+' : ' +str(Acc_accumulator/float(counter))+'\n')
 
     def Model_Saving(self, modelType):
@@ -206,5 +214,78 @@ class Fraud_DetectionTraining:
         self.sc.stop()
         self.spark.stop()
 
+class Use_Model:
+    def __init__(self, Clustering=True, file_name = 'test.csv', modelType = 'LRlbfgs'):
+        self.sc = SparkContext()
+        self.spark = SparkSession \
+            .builder \
+            .appName("Fraud_Detection") \
+            .config("spark.some.config.option", "some-value") \
+            .getOrCreate()
+        self.df = self.spark.read.csv(file_name, header=True, inferSchema=True).drop('click_id')
+        self.header = self.df.columns
+        self.rdd = self.sc.parallelize(self.df.collect())
+        #-----must be a local variable------#
+        def time_Parse(rdd_row):
+            weekday_ = rdd_row['click_time'].timetuple().tm_wday
+            hour_ = rdd_row['click_time'].timetuple().tm_hour
+            new_rddRow = list(rdd_row) + [weekday_, hour_]
+            return tuple(new_rddRow)
+        self.new_data = self.rdd.map(lambda x: time_Parse(x)).collect()
+        #-----function end-----------------#
+        self.new_header = self.header + ['weekday', 'hour']
+        self.rdd2 = self.sc.parallelize(self.new_data)
+        self.df_new = self.spark.createDataFrame(self.rdd2, self.new_header)
+        self.df_PD = self.df_new.select('ip','app','device','os','channel','weekday','hour').distinct().toPandas()
+        #--------KMeans Clustering----------#
+        if Clustering:
+            self.KMeans_Processing(['weekday','hour'])
+        #-----Features&Prediction-----#
+        self.Features = np.array(self.df_PD[list(self.df_PD.columns)])
+        self.Prediction(modelType)
+        #-----to.csv-----#
+        self.df_PD.to_csv('predicted.csv')
 
-Fraud_DetectionTraining(Clustering=True, file_name='Data/train_sample.csv', classificationModel='LRlbfgs', ModelSave=True)
+    def KMeans_Processing(self, columns):
+        data_point = np.array(self.df_PD[columns])
+        model = KMeansModel.load(self.sc, 'Model/'+'KMeans')
+        result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
+        self.df_PD.insert(len(list(self.df_PD.columns)), 'KMeans_feature', result)
+
+    def Prediction(self, modelType):
+        data_point = self.Features
+        if modelType == 'RF':
+            model = RandomForestModel.load(self.sc, 'Model/'+modelType)
+            result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
+            self.df_PD.insert(len(list(self.df_PD.columns)), 'result', result)
+        elif modelType == 'GBDT':
+            model = GradientBoostedTreesModel.load(self.sc, 'Model/'+modelType)
+            result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
+            self.df_PD.insert(len(list(self.df_PD.columns)), 'result', result)
+        elif modelType == 'LRsgd':
+            model = LogisticRegressionModel.load(self.sc, 'Model/'+modelType)
+            result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
+            self.df_PD.insert(len(list(self.df_PD.columns)), 'result', result)
+        elif modelType == 'LRlbfgs':
+            model = LogisticRegressionModel.load(self.sc, 'Model/'+modelType)
+            result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
+            self.df_PD.insert(len(list(self.df_PD.columns)), 'result', result)
+        elif modelType == 'SVM':
+            model = SVMModel.load(self.sc, 'Model/'+modelType)
+            result = np.array(model.predict(self.sc.parallelize(data_point)).collect())
+            self.df_PD.insert(len(list(self.df_PD.columns)), 'result', result)
+        else:
+            pass
+
+    def __del__(self):
+        self.sc.stop()
+        self.spark.stop()
+
+Use_Model(Clustering=True, file_name = 'test.csv', modelType = 'LRlbfgs')
+
+def fitModel():
+    NameList = ['xaaaa.csv']
+    test_list = ['LRlbfgs']
+    for item in test_list:
+        print ('Runing Model: '+ item)
+        Fraud_DetectionTraining(Clustering=True, file_name = NameList, classificationModel=item, ModelSave=True)
