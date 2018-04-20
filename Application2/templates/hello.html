@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+      <title>Fraud Detection</title>
+      <link href="/static/css/style.css" rel="stylesheet" type="text/css"/>
+      <script>
+      function show(){
+          document.getElementById('Soil').style.display = "block";
+      }
+      </script>
+    </head>
+    <body>
+      <h1>Upload Your Data(.csv)</h1>
+      <form class="form" method="post" enctype= "multipart/form-data">
+        <div>
+          Select Model:<br>
+          <select name='select'>
+            <option value="RF">RF</option>
+            <option value="GBDT">GBDT</option>
+            <option value="LRlbfgs">LRlbfgs</option>
+            <option value="LRsgd">LRsgd</option>
+            <option value="SVM">SVM</option>
+          </select>
+        </div>
+        <br>Uploading:<br>
+        <input type="file" name="file">
+        <br><br>
+        <input type="submit" value="Predict">
+      </form>
+    </body>
+</html>
