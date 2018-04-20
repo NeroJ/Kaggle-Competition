@@ -29,7 +29,7 @@ def upload_file():
             return redirect(request.url)
         file = request.files['file']
         modelType = request.form['select']
-        print(modelType,file=sys.stderr)
+        #print(modelType,file=sys.stderr)
         # if user does not select file, browser also
         # submit a empty part without filename
         if file.filename == '':
