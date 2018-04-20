@@ -22,7 +22,7 @@ from pyspark.mllib.classification import SVMModel, LogisticRegressionModel
 class Use_Model:
     def __init__(self, Clustering=True, baseDir = 'test.csv', modelType = 'LRlbfgs', filename = 'test.csv'):
         self.filename = filename
-        self.downloadName = filename+'_predicted.csv'
+        self.downloadName = filename+'_'+modelType +'_predicted.csv'
         self.baseDir = baseDir
         self.sc = SparkContext()
         self.spark = SparkSession \

@@ -43,13 +43,13 @@ input[type="text"]{
 input[type="file"]{
     width: 288px;
     height: 25px;
-    background-color: #eeeeee;
+    background-color: none;
     border:none;
     border-top-left-radius:5px;
     border-bottom-left-radius:5px;
     border-top-right-radius:5px;
     border-bottom-right-radius:5px;
-    font: bold 15px 'lucida sans', 'trebuchet MS', 'Tahoma';
+    font: bold 8px 'lucida sans', 'trebuchet MS', 'Tahoma';
     font-style:italic;
 }
 

@@ -28,6 +28,8 @@ def upload_file():
             flash('No file part')
             return redirect(request.url)
         file = request.files['file']
+        modelType = request.form['select']
+        print(modelType,file=sys.stderr)
         # if user does not select file, browser also
         # submit a empty part without filename
         if file.filename == '':
@@ -37,12 +39,15 @@ def upload_file():
             filename = secure_filename(file.filename)
             #print(filename,file=sys.stderr)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            Use_Model(Clustering=True, baseDir = os.getcwd(), modelType = 'LRlbfgs', filename = filename)
+            Use_Model(Clustering=True, baseDir = os.getcwd(), modelType = modelType, filename = filename)
             return redirect(url_for('uploaded_file',
-                                    filename=filename+'_predicted.csv'))
+                                    filename=filename+'_'+modelType +'_predicted.csv'))
     return render_template('hello.html')
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'],
                                filename)
+
+if __name__ == '__main__':
+  app.run()
