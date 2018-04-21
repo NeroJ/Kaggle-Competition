@@ -1,6 +1,0 @@
-flask
-pyspark
-sklearn
-pandas
-numpy
-json
